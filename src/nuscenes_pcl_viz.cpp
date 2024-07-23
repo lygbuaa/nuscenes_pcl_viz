@@ -9,6 +9,21 @@
 #include "pcl/point_cloud.h"
 #include "pcl/visualization/pcl_visualizer.h"
 
+#define __LOG_USE_BASE_FILENAME__
+
+#ifdef __LOG_USE_BASE_FILENAME__
+    #ifdef __FILE_NAME__ /** since gcc-12 */
+        #define __LOG_FILENAME__  __FILE_NAME__
+    #else
+        #define __LOG_FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
+    #endif
+#else
+    #define __LOG_FILENAME__  __FILE__
+#endif
+
+//** log with fprintf *//
+#define LOGPF(format, ...) fprintf(stderr ,"[%s:%d] " format "\n", __LOG_FILENAME__, __LINE__, ##__VA_ARGS__)
+
 void PrintUsage() {
     std::cout << "Usage: nuscenes_pcl_viz <config_file>\n";
     std::cout << "\n  Reads scene according to config file and visualize it in PCLVisualizer\n";
@@ -270,6 +285,7 @@ int main(int argc, char* argv[]) {
         } else {
             cloud_ptr = boost::make_shared<pcl::PointCloud<pcl::PointXYZI>>();
             ReadPCDBin(sceneSweeps[scene_id][cloud_id].filename, cloud_ptr);
+            LOGPF("load file (%s), point size: %ld", sceneSweeps[scene_id][cloud_id].filename.c_str(), cloud_ptr->size());
         }
             
         // color_handler = boost::make_shared<pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZI> >(next_cloud_ptr, 255, 255, 255);
