@@ -6,9 +6,9 @@ Quick and simple visualizer of NuScenes LIDAR_TOP sweeps in C++ with PCL.
 Tested on Ubuntu 18.04.
 
 Required system libs:
-- JsonCpp
-- YamlCpp
-- PCL 
+- JsonCpp  `apt install libjsoncpp-dev`
+- YamlCpp  `apt install libyaml-cpp-dev`
+- PCL      `installed with ROS`
 
 ## Build
 CMake based:
