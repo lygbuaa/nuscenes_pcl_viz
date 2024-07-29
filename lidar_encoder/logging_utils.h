@@ -2,14 +2,14 @@
 #define __LOGGING_UTILS_H__
 
 /* set non-debug mode */
-#ifndef NDEBUG
-    #define NDEBUG 
-#endif
+// #ifndef NDEBUG
+//     #define NDEBUG 
+// #endif
 
 /** set debug mode */
-// #ifdef NDEBUG
-//     #undef NDEBUG 
-// #endif
+#ifdef NDEBUG
+    #undef NDEBUG 
+#endif
 
 #include <stdio.h>      /* printf */
 #include <stdlib.h>     /* getenv */

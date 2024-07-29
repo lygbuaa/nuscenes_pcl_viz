@@ -340,6 +340,21 @@ public:
             return false;
         }
         RLOGI("loaded (%s)", lidar_json_file);
+        uint8_t* tmpbuf = new uint8_t[LSCH128X1Encoder::CH128X1_FRAME_SIZE_];
+
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_ptr(new pcl::PointCloud<pcl::PointXYZI>());
+        pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("CH128X1_VIZ"));
+        viewer->initCameraParameters();
+        viewer->addCoordinateSystem(1.0, "coord_zero");
+        viewer->setCameraPosition(
+            0, 0, 30,
+            0, 0, 0,
+            0, 1, 0); // 0, 1, 0
+
+        /** color: x, y, z, or intensity, larger is redder */
+        pcl::visualization::PointCloudColorHandler<pcl::PointXYZI>::Ptr color_handler = boost::make_shared<pcl::visualization::PointCloudColorHandlerGenericField<pcl::PointXYZI> >(cloud_ptr, "intensity");
+        viewer->addPointCloud<pcl::PointXYZI>(cloud_ptr, *color_handler, "CH128X1_VIZ", 0);
+        viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "CH128X1_VIZ");
 
         Json::Reader reader;
         Json::Value root_obj;
@@ -349,8 +364,58 @@ public:
         for(uint32_t i=0; i<data_list_obj.size(); i++)
         {
             Json::Value& data_i = data_list_obj[i];
+            std::string ch128x1_file = data_i["LIDAR_TOP"]["ch128x1_file"].asString();
+            uint64_t timestamp_us = data_i["LIDAR_TOP"]["timestamp_us"].asUInt64();
+            RLOGI("lidar block[%d] timestamp_us (%ld), ch128x1_file: %s", i, timestamp_us, ch128x1_file.c_str());
+
+            /** open ch128x1 file, load frames and decode into pcl::PointCloud */
+            cloud_ptr->clear();
+
+            FILE * pFile;
+            pFile = fopen(ch128x1_file.c_str(), "rb");
+
+            do{
+                memset(tmpbuf, 0, LSCH128X1Encoder::CH128X1_FRAME_SIZE_);
+                size_t num_bytes = fread(tmpbuf, sizeof(uint8_t), LSCH128X1Encoder::CH128X1_FRAME_SIZE_, pFile);
+                if(num_bytes == LSCH128X1Encoder::CH128X1_FRAME_SIZE_)
+                {
+                    /** decode difop frame */
+                    std::vector<uint8_t> difop_frame(tmpbuf, tmpbuf+LSCH128X1Encoder::CH128X1_FRAME_SIZE_);
+                    LSCH128X1Encoder::ParseDifopFrame(difop_frame);
+
+                    uint32_t msop_count = 0;
+                    while(num_bytes == LSCH128X1Encoder::CH128X1_FRAME_SIZE_)
+                    {
+                        memset(tmpbuf, 0, LSCH128X1Encoder::CH128X1_FRAME_SIZE_);
+                        num_bytes = fread(tmpbuf, sizeof(uint8_t), LSCH128X1Encoder::CH128X1_FRAME_SIZE_, pFile);
+                        if(num_bytes != LSCH128X1Encoder::CH128X1_FRAME_SIZE_)
+                        {
+                            RLOGI("file %s reach end, total %d msop frames.", ch128x1_file.c_str(), msop_count);
+                            break;
+                        }
+                        std::vector<uint8_t> msop_frame(tmpbuf, tmpbuf+LSCH128X1Encoder::CH128X1_FRAME_SIZE_);
+                        msop_count ++;
+                        /** decode msop frame, store points into cloud_ptr */
+                        LSCH128X1Encoder::ParseMsopFrame(msop_frame, cloud_ptr);
+                    }
+                }
+                else
+                {
+                    RLOGE("read file %s error.", ch128x1_file.c_str());
+                    break;
+                }
+            }while(false);
+
+            RLOGI("file %s points count %d.", ch128x1_file.c_str(), cloud_ptr->size());
+            fclose(pFile);
+
+            /** pcl visualize */
+            viewer->updatePointCloud<pcl::PointXYZI>(cloud_ptr, *color_handler, "CH128X1_VIZ");
+            // usleep(100*1000);
+            viewer->spinOnce(200);
         }
 
+        delete tmpbuf;
         return true;
     }
 
@@ -397,6 +462,21 @@ private:
         }
         RLOGI("load file (%s) points: (%d)", fname.c_str(), cloud->size());
         file.close();
+
+#if 0
+        for(uint32_t idx=0; idx<cloud->size(); idx++)
+        {
+            pcl::PointXYZI& p = cloud->at(idx);
+            float fx = p.x;
+            float fy = p.y;
+            float fz = p.z;
+            float fi = p.intensity / 100.0f;
+            if(idx % 1000 == 0)
+            {
+                RLOGI("point[%d]: %.3f, %.3f, %.3f, %.3f", idx, fx, fy, fz, fi);
+            }
+        }
+#endif
         return true;
     }
 

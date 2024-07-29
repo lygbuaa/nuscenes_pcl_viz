@@ -22,8 +22,9 @@ typedef union{
     uint8_t buf[2];
 }CH128X1_UINT16_u;
 
-typedef std::vector<std::vector<uint8_t>> MSOP_Frames_t;
 typedef std::vector<uint8_t> DIFOP_Frame_t;
+typedef std::vector<uint8_t> MSOP_Frame_t;
+typedef std::vector<MSOP_Frame_t> MSOP_Frames_t;
 
 class LSCH128X1Encoder
 {
@@ -101,20 +102,22 @@ public:
     {
         static uint32_t msop_count_ = 0;
         MSOP_Frames_t msop_frames;
+        float vert_angle_min = 180.0f;
+        float vert_angle_max = -180.0f;
 
         const uint32_t points_count = cloud_ptr->size();
         const uint32_t subframe_count = uint32_t(points_count / CH128X1_SUBFRAME_POINTS_); //the max is 8983
         for(uint32_t j=0; j<subframe_count; j++)
         {
             std::vector<uint8_t> msop_frame;
-            uint32_t subframe_count = CH128X1_SUBFRAME_POINTS_;
+            uint32_t subpoints_count = CH128X1_SUBFRAME_POINTS_;
             /** attach header on the first msop frame */
             if(j==0)
             {
                 msop_frame.insert(msop_frame.end(), CH128X1_MSOP_HEADER_, CH128X1_MSOP_HEADER_+7);
-                subframe_count -= 1;
+                subpoints_count -= 1;
             }
-            for(uint32_t i=0; i<subframe_count; i++)
+            for(uint32_t i=0; i<subpoints_count; i++)
             {
                 const uint32_t idx = i + j*CH128X1_SUBFRAME_POINTS_;
                 pcl::PointXYZI& p = cloud_ptr->at(idx);
@@ -122,15 +125,28 @@ public:
                 float fy = p.y;
                 float fz = p.z;
                 float fi = p.intensity / 100.0f;
-                if(idx % 1000 == 0)
+                /** nuscenes body-coord: X-right, Y-forward, Z-up */
+                float dist = sqrt(fx*fx + fy*fy);
+                /** acos return [0,pi], with sign of y, extend to [-pi, pi] */
+                float hori_angle = copysign(acos(fx/dist)*57.3f, fy);
+                float vert_angle = atan(fz/dist)*57.3f;
+                int32_t line_num = std::round((vert_angle - LOWER_FOV_) / VERTICAL_RESOLUTION_);
+                assert(line_num >= 0 && line_num < 256);
+                // assert(line_num >= 100);
+                if(vert_angle < vert_angle_min)
                 {
-                    // RLOGI("point[%d]: %.3f, %.3f, %.3f, %.3f", idx, fx, fy, fz, fi);
+                    vert_angle_min = vert_angle;
+                }
+                else if(vert_angle > vert_angle_max)
+                {
+                    vert_angle_max = vert_angle;
                 }
 
-                float dist = sqrt(fx*fx + fy*fy);
-                float hori_angle = acos(fy/dist)*57.3f;
-                float vert_angle = atan(fz/dist)*57.3f;
-                uint32_t line_num = std::round((vert_angle - LOWER_FOV_) / VERTICAL_RESOLUTION_);
+                if(idx % 1000 == 0)
+                {
+                    // RLOGI("xyzi[%d]: %.3f, %.3f, %.3f, %.3f", idx, fx, fy, fz, fi);
+                    // RLOGI("polar[%d] (%.3f, %.3f, %.3f, %.3f), line_num: %d", idx, dist, hori_angle, vert_angle, fi, line_num);
+                }
 
                 std::vector<uint8_t> subframe;
                 subframe.resize(CH128X1_SUBFRAME_BYTES_);
@@ -138,13 +154,13 @@ public:
 
                 CH128X1_INT16_u hori_angle_u;
                 hori_angle_u.int_part = (int16_t)(100*hori_angle);
-                subframe[1] = hori_angle_u.buf[0];
-                subframe[2] = hori_angle_u.buf[1];
+                subframe[1] = hori_angle_u.buf[1]; //little-endian
+                subframe[2] = hori_angle_u.buf[0]; //little-endian
 
                 CH128X1_UINT16_u dist_cm_u;
                 dist_cm_u.int_part = (int16_t)(100*dist);
-                subframe[3] = dist_cm_u.buf[0];
-                subframe[4] = dist_cm_u.buf[1];
+                subframe[3] = dist_cm_u.buf[1];
+                subframe[4] = dist_cm_u.buf[0];
 
                 uint8_t dist_residual = uint8_t(256*(dist*100 - dist_cm_u.int_part));
                 subframe[5] = dist_residual;
@@ -179,8 +195,58 @@ public:
             // }
             // RLOGI("msop[%d] frame[%ld] size %d", msop_count_, msop_frames.size(), msop_frame.size());
         }
-        RLOGI("in this frame msop count: [%d], msop total count: [%d]", msop_frames.size(), msop_count_);
+        RLOGI("in this frame msop count: [%d], msop total count: [%d], vert_angle_min: (%.2f), vert_angle_max: (%.2f)", msop_frames.size(), msop_count_, vert_angle_min, vert_angle_max);
         return msop_frames;
+    }
+
+    static bool ParseDifopFrame(const DIFOP_Frame_t& difop_frame)
+    {
+        CH128X1_DATE_t date_vec;
+        date_vec.resize(6);
+        date_vec[0] = difop_frame[52] + 2000;
+        date_vec[1] = difop_frame[53];
+        date_vec[2] = difop_frame[54];
+        date_vec[3] = difop_frame[55];
+        date_vec[4] = difop_frame[56];
+        date_vec[5] = difop_frame[57];
+        RLOGI("difop frame date %d-%d-%d %d-%d-%d", date_vec[0], date_vec[1], date_vec[2], date_vec[3], date_vec[4], date_vec[5]);
+        return true;
+    }
+
+    static bool ParseMsopFrame(const MSOP_Frame_t& msop_frame, pcl::PointCloud<pcl::PointXYZI>::Ptr& cloud_ptr)
+    {
+        const uint8_t* head_ptr = msop_frame.data();
+        uint8_t tmpbuf[CH128X1_SUBFRAME_BYTES_] = {0};
+        for(uint32_t i=0; i<CH128X1_SUBFRAME_POINTS_; i++)
+        {
+            const uint8_t* data_ptr = head_ptr + i*CH128X1_SUBFRAME_BYTES_;
+            if(0 == memcmp(data_ptr, CH128X1_MSOP_HEADER_, 7))
+            {
+                RLOGI("find ch128x1 header.");
+                continue;
+            }
+
+            float intensity = data_ptr[6] / 255.0f;
+            float radius = ((data_ptr[3]<<8) + data_ptr[4] + data_ptr[5]/256)*0.01f;
+            float theta = (int16_t)((data_ptr[1]<<8) + data_ptr[2])*0.01f*DEG2RAD_;
+            float phi = (data_ptr[0]*VERTICAL_RESOLUTION_ + LOWER_FOV_)*DEG2RAD_;
+
+            /** polar to cartesian, sensor coordinate */
+            pcl::PointXYZI point{};
+            point.x = radius * std::cos(theta);
+            point.y = radius * std::sin(theta);
+            point.z = radius * std::tan(phi);
+            point.intensity = intensity * 100.0f;
+            // point.intensity = 1.0f;
+            cloud_ptr->push_back(point);
+            if(i % 100 == 3)
+            {
+                // RLOGI("polar[%d] (%.3f, %.3f, %.3f, %.3f)", i, radius, theta, phi, intensity);
+                // RLOGI("xyzi[%d] (%.3f, %.3f, %.3f, %.3f)", i, point.x, point.y, point.z, intensity);
+            }
+        }
+
+        return true;
     }
 
     static void test()
@@ -201,10 +267,11 @@ public:
     constexpr static uint8_t CH128X1_DIFOP_TAIL_[2] = {0x0F, 0xF0};
     constexpr static uint8_t CH128X1_UCWP_HEADER_[8] = {0xAA, 0x00, 0xFF, 0x11, 0x22, 0x22, 0xAA, 0xAA};
     constexpr static uint8_t CH128X1_UCWP_TAIL_[2] = {0x0F, 0xF0};
-    constexpr static float LOWER_FOV_ = -18.0;
-    constexpr static float UPPER_FOV_ = 7.0;
-    constexpr static uint32_t CHANNELS_ = 128;
+    constexpr static float LOWER_FOV_ = -60.0; //-18.0;
+    constexpr static float UPPER_FOV_ = 12.0;  //7.0;
+    constexpr static uint32_t CHANNELS_ = 256;
     constexpr static float VERTICAL_RESOLUTION_ = (UPPER_FOV_ - LOWER_FOV_) / CHANNELS_;
+    constexpr static float DEG2RAD_ = M_PI/180.0f;
 };
 
 #endif //__LSCH128X1_ENCODER_H__

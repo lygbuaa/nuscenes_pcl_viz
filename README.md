@@ -23,6 +23,7 @@ make
 Edit `config.yaml` to point to your [NuScenes dataset](https://www.nuscenes.org/). (WARNING: It's definitely slow for full NuScenes dataset but works good for `v1.0-mini` sizes).
 ```
 ./nuscenes_pcl_viz ../config.yaml
+./build/nuscenes_pcl_viz config.yaml
 ```
 Press `n` to switch between scenes. And default `h` key for help (PCLVisualizer).
 

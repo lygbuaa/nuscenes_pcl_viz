@@ -178,6 +178,20 @@ bool ReadPCDBin(const std::string& fname, pcl::PointCloud<pcl::PointXYZI>& cloud
         cloud.push_back(point);
     }
     file.close();
+
+    for(uint32_t idx=0; idx<cloud.size(); idx++)
+    {
+        pcl::PointXYZI& p = cloud.at(idx);
+        float fx = p.x;
+        float fy = p.y;
+        float fz = p.z;
+        float fi = p.intensity / 100.0f;
+        if(idx % 1000 == 0)
+        {
+            LOGPF("point[%d]: %.3f, %.3f, %.3f, %.3f", idx, fx, fy, fz, fi);
+        }
+    }
+
     return true;
 }
 
@@ -293,6 +307,18 @@ int main(int argc, char* argv[]) {
 
         viewer->updatePointCloud<pcl::PointXYZI>(cloud_ptr, *color_handler, cloud_name);
 
+        // for(uint32_t idx=0; idx<cloud_ptr->size(); idx++)
+        // {
+        //     pcl::PointXYZI& p = cloud_ptr->at(idx);
+        //     float fx = p.x;
+        //     float fy = p.y;
+        //     float fz = p.z;
+        //     float fi = p.intensity / 100.0f;
+        //     if(idx % 1000 == 0)
+        //     {
+        //         LOGPF("point[%d]: %.3f, %.3f, %.3f, %.3f", idx, fx, fy, fz, fi);
+        //     }
+        // }
     }    
 
     return EXIT_SUCCESS;
