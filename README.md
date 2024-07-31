@@ -28,3 +28,27 @@ Edit `config.yaml` to point to your [NuScenes dataset](https://www.nuscenes.org/
 Press `n` to switch between scenes. And default `h` key for help (PCLVisualizer).
 
 ![Viewer](./images/nuscenes_pcl_viz.gif)
+
+
+## LIDAR_TOP extrinsics
+```
+nuscenes body-coord (imu-coord): X-forward, Y-left, Z-up
+nuscenes lidar-coord: X-right, Y-forward, Z-up
+```
+{
+"token": "d051cafdd9fe4d999b413462364d44a0",
+"sensor_token": "dc8b396651c05aedbb9cdaae573bb567",
+"translation": [
+0.985793,
+0.0,
+1.84019
+],
+//left-hand, euler x: 0.1706383, y: 2.6496977, z: -90.0311332
+"rotation": [  //w, x, y, z
+0.706749235646644,
+-0.015300993788500868,
+0.01739745181256607,
+-0.7070846669051719
+],
+"camera_intrinsic": []
+},

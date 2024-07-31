@@ -17,7 +17,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(jsoncpp REQUIRED jsoncpp)
 pkg_check_modules(yamlcpp REQUIRED yaml-cpp)
 
-find_package(PCL REQUIRED COMPONENTS common visualization)
+find_package(PCL REQUIRED COMPONENTS common filters visualization)
 
 include_directories(
     include

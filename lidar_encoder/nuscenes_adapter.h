@@ -13,6 +13,7 @@
 #include "pcl/visualization/pcl_visualizer.h"
 #include "logging_utils.h"
 #include "lsch128x1_encoder.h"
+#include "pcl_preprocess.h"
 
 struct NuScenesConfig
 {
@@ -21,6 +22,7 @@ struct NuScenesConfig
     Json::Value scene;
     Json::Value sample;
     Json::Value sampleData;
+    Json::Value egoPose;
     Json::Value nullValue;
 
     struct LidarSweep 
@@ -29,6 +31,11 @@ struct NuScenesConfig
         std::string filename;
         std::string token;
         std::string sample_token;
+        Json::Value obj_quat;
+        Json::Value obj_trans;
+        // float quat_wxyz_ego2world[4];
+        // float trans_xyz_ego2world[3];
+
         void PrintInfo() 
         {
             RLOGI("LidarSweep (%s): timestamp %ld, filename: %s.", token.c_str(), timestamp_us, filename.c_str());
@@ -84,16 +91,47 @@ struct NuScenesConfig
         std::string last_sample_token = scene["last_sample_token"].asString();
         
         Json::Value& sample = GetSampleById(first_sample_token);
+        uint32_t count = 0;
         while (!sample.isNull()) 
         {
             auto lidarSamples = GetLidarSamples(sample);
             for (auto& ls : lidarSamples) 
             {
+                /** find quaternion && translation in ego_pose.json */
+                Json::Value obj_quat;
+                Json::Value obj_trans;
+                for(uint32_t i=0; i<egoPose.size(); i++)
+                {
+                    Json::Value& ego_pose_i = egoPose[i];
+                    if(ls["token"].asString() == ego_pose_i["token"].asString())
+                    {
+                        count ++;
+                        obj_quat = ego_pose_i["rotation"];
+                        obj_trans = ego_pose_i["translation"];
+                        float quat_wxyz_ego2world[4] = {0.0f};
+                        float trans_xyz_ego2world[3] = {0.0f};
+                        for(uint32_t j=0; j<obj_quat.size(); j++)
+                        {
+                            quat_wxyz_ego2world[j] = obj_quat[j].asFloat();
+                        }
+                        for(uint32_t j=0; j<obj_trans.size(); j++)
+                        {
+                            trans_xyz_ego2world[j] = obj_trans[j].asFloat();
+                        }
+                        // RLOGI("find ego_pose[%d] quat: (%.4f, %.4f, %.4f, %.4f), trans: (%.4f, %.4f, %.4f)", \
+                        //     count, quat_wxyz_ego2world[0], quat_wxyz_ego2world[1], quat_wxyz_ego2world[2], quat_wxyz_ego2world[3], \
+                        //     trans_xyz_ego2world[0], trans_xyz_ego2world[1], trans_xyz_ego2world[2]);
+                        break;
+                    }
+                }
+
                 sweeps.push_back(LidarSweep{
                     ls["timestamp"].asUInt64(),
                     dir + "/" + ls["filename"].asString(),
                     ls["token"].asString(),
-                    ls["sample_token"].asString()
+                    ls["sample_token"].asString(),
+                    obj_quat,
+                    obj_trans
                 });
             }
             if (sample["token"].asString() == last_sample_token) 
@@ -155,10 +193,20 @@ struct NuScenesConfig
         }
         RLOGI("loaded (%s)", sample_data_json_file.c_str());
 
+        std::string ego_pose_json_file = nuScenesConfig.DataPath() + "/ego_pose.json";
+        std::ifstream configEgoPose(ego_pose_json_file);
+        if (!configEgoPose.good()) 
+        {
+            RLOGE("Can't open file: %s", ego_pose_json_file.c_str());
+            return false;
+        }
+        RLOGI("loaded (%s)", ego_pose_json_file.c_str());
+
         Json::Reader reader;
         reader.parse(configScene,      nuScenesConfig.scene);
         reader.parse(configSample,     nuScenesConfig.sample);
         reader.parse(configSampleData, nuScenesConfig.sampleData);
+        reader.parse(configEgoPose, nuScenesConfig.egoPose);
 
         RLOGI("LoadNuscenesJson success.");
         return true;
@@ -310,6 +358,10 @@ public:
                 data_i["LIDAR_TOP"]["ch128x1_file"] = pcd_ch128x1_path.c_str();
                 data_i["LIDAR_TOP"]["token"] = pcd.token;
                 data_i["LIDAR_TOP"]["sample_token"] = pcd.sample_token;
+                // float quat_wxyz_ego2world[4] = {0.0f};
+                // float trans_xyz_ego2world[3] = {0.0f};
+                data_i["LIDAR_TOP"]["quat_wxyz_ego2world"] = pcd.obj_quat;
+                data_i["LIDAR_TOP"]["trans_xyz_ego2world"] = pcd.obj_trans;
                 RLOGI("camera block[%d] match lidar data (diff=%ldus):\n%s\n", i, mints_diff, data_i["LIDAR_TOP"].toStyledString().c_str());
             }
             else
@@ -342,7 +394,10 @@ public:
         RLOGI("loaded (%s)", lidar_json_file);
         uint8_t* tmpbuf = new uint8_t[LSCH128X1Encoder::CH128X1_FRAME_SIZE_];
 
-        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_ptr(new pcl::PointCloud<pcl::PointXYZI>());
+        std::shared_ptr<PclPreprocess> pps = std::make_shared<PclPreprocess>();
+        pps->init_filter();
+
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_sensor(new pcl::PointCloud<pcl::PointXYZI>());
         pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("CH128X1_VIZ"));
         viewer->initCameraParameters();
         viewer->addCoordinateSystem(1.0, "coord_zero");
@@ -352,8 +407,8 @@ public:
             0, 1, 0); // 0, 1, 0
 
         /** color: x, y, z, or intensity, larger is redder */
-        pcl::visualization::PointCloudColorHandler<pcl::PointXYZI>::Ptr color_handler = boost::make_shared<pcl::visualization::PointCloudColorHandlerGenericField<pcl::PointXYZI> >(cloud_ptr, "intensity");
-        viewer->addPointCloud<pcl::PointXYZI>(cloud_ptr, *color_handler, "CH128X1_VIZ", 0);
+        pcl::visualization::PointCloudColorHandler<pcl::PointXYZI>::Ptr color_handler = boost::make_shared<pcl::visualization::PointCloudColorHandlerGenericField<pcl::PointXYZI> >(cloud_sensor, "intensity");
+        viewer->addPointCloud<pcl::PointXYZI>(cloud_sensor, *color_handler, "CH128X1_VIZ", 0);
         viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "CH128X1_VIZ");
 
         Json::Reader reader;
@@ -366,10 +421,24 @@ public:
             Json::Value& data_i = data_list_obj[i];
             std::string ch128x1_file = data_i["LIDAR_TOP"]["ch128x1_file"].asString();
             uint64_t timestamp_us = data_i["LIDAR_TOP"]["timestamp_us"].asUInt64();
-            RLOGI("lidar block[%d] timestamp_us (%ld), ch128x1_file: %s", i, timestamp_us, ch128x1_file.c_str());
-
+            Json::Value& obj_quat = data_i["LIDAR_TOP"]["quat_wxyz_ego2world"];
+            Json::Value& obj_trans = data_i["LIDAR_TOP"]["trans_xyz_ego2world"];
+            float quat_wxyz_ego2world[4] = {0.0f};
+            float trans_xyz_ego2world[3] = {0.0f};
+            for(uint32_t j=0; j<obj_quat.size(); j++)
+            {
+                quat_wxyz_ego2world[j] = obj_quat[j].asFloat();
+            }
+            for(uint32_t j=0; j<obj_trans.size(); j++)
+            {
+                trans_xyz_ego2world[j] = obj_trans[j].asFloat();
+            }
+            RLOGI("lidar block[%d] timestamp_us (%ld), ch128x1_file: %s\nquat: (%.4f, %.4f, %.4f, %.4f), trans: (%.4f, %.4f, %.4f)", \
+                    i, timestamp_us, ch128x1_file.c_str(), \
+                    quat_wxyz_ego2world[0], quat_wxyz_ego2world[1], quat_wxyz_ego2world[2], quat_wxyz_ego2world[3], \
+                    trans_xyz_ego2world[0], trans_xyz_ego2world[1], trans_xyz_ego2world[2]);
             /** open ch128x1 file, load frames and decode into pcl::PointCloud */
-            cloud_ptr->clear();
+            cloud_sensor->clear();
 
             FILE * pFile;
             pFile = fopen(ch128x1_file.c_str(), "rb");
@@ -395,8 +464,8 @@ public:
                         }
                         std::vector<uint8_t> msop_frame(tmpbuf, tmpbuf+LSCH128X1Encoder::CH128X1_FRAME_SIZE_);
                         msop_count ++;
-                        /** decode msop frame, store points into cloud_ptr */
-                        LSCH128X1Encoder::ParseMsopFrame(msop_frame, cloud_ptr);
+                        /** decode msop frame, store points into cloud_sensor */
+                        LSCH128X1Encoder::ParseMsopFrame(msop_frame, cloud_sensor);
                     }
                 }
                 else
@@ -406,13 +475,22 @@ public:
                 }
             }while(false);
 
-            RLOGI("file %s points count %d.", ch128x1_file.c_str(), cloud_ptr->size());
+            RLOGI("file %s points count %d.", ch128x1_file.c_str(), cloud_sensor->size());
             fclose(pFile);
 
+            pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_ego(new pcl::PointCloud<pcl::PointXYZI>());
+            pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_world(new pcl::PointCloud<pcl::PointXYZI>());
+            pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_filter(new pcl::PointCloud<pcl::PointXYZI>());
+
+            pps -> Filter(cloud_sensor, cloud_filter);
+            // pps -> TransformLidar2Ego(cloud_sensor, cloud_ego);
+            pps -> GetTfLidar2World(quat_wxyz_ego2world, trans_xyz_ego2world);
+            pps -> TransformLidar2World(cloud_filter, cloud_world);
+            
             /** pcl visualize */
-            viewer->updatePointCloud<pcl::PointXYZI>(cloud_ptr, *color_handler, "CH128X1_VIZ");
+            viewer->updatePointCloud<pcl::PointXYZI>(cloud_world, *color_handler, "CH128X1_VIZ");
             // usleep(100*1000);
-            viewer->spinOnce(200);
+            viewer->spinOnce(100);
         }
 
         delete tmpbuf;
@@ -421,7 +499,7 @@ public:
 
     void test()
     {
-        LSCH128X1Encoder::test();
+        // LSCH128X1Encoder::test();
         std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> pcs;
         // LoadPCDByScene(1, pcs);
         // LoadCameraJsonThenAddLidar(1, "/home/hugoliu/alaska/dataset/nuscenes/data_set_noa_sgrbg12/nusc_dataset_noa_sgrbg12.json");

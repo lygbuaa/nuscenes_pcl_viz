@@ -22,13 +22,14 @@ int main(int argc, char **argv)
 #endif
 
     std::vector<int> sigs;
+    sigs.push_back(SIGINT);
     sigs.push_back(SIGABRT);
     sigs.push_back(SIGTERM);
     SignalHandlers::RegisterBackTraceSignals(sigs);
     SignalHandlers::RegisterBreakSignals(SIGINT);
 
     auto ns_adapter = std::make_shared<NuscenesAdapter>();
-    ns_adapter -> LoadConfig(argv[1]);
+    // ns_adapter -> LoadConfig(argv[1]);
     ns_adapter -> test();
 
     // uint32_t heartbeat = 0;
