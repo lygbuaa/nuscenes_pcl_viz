@@ -22,6 +22,9 @@ struct NuScenesConfig
     Json::Value scene;
     Json::Value sample;
     Json::Value sampleData;
+    Json::Value sampleAnnotation;
+    Json::Value instance;
+    Json::Value category;
     Json::Value egoPose;
     Json::Value nullValue;
 
@@ -33,6 +36,7 @@ struct NuScenesConfig
         std::string sample_token;
         Json::Value obj_quat;
         Json::Value obj_trans;
+        Json::Value obj_annotation_list;
         // float quat_wxyz_ego2world[4];
         // float trans_xyz_ego2world[3];
 
@@ -91,7 +95,7 @@ struct NuScenesConfig
         std::string last_sample_token = scene["last_sample_token"].asString();
         
         Json::Value& sample = GetSampleById(first_sample_token);
-        uint32_t count = 0;
+        uint32_t ls_count = 0;
         while (!sample.isNull()) 
         {
             auto lidarSamples = GetLidarSamples(sample);
@@ -105,7 +109,7 @@ struct NuScenesConfig
                     Json::Value& ego_pose_i = egoPose[i];
                     if(ls["token"].asString() == ego_pose_i["token"].asString())
                     {
-                        count ++;
+                        ls_count ++;
                         obj_quat = ego_pose_i["rotation"];
                         obj_trans = ego_pose_i["translation"];
                         float quat_wxyz_ego2world[4] = {0.0f};
@@ -125,13 +129,54 @@ struct NuScenesConfig
                     }
                 }
 
+                Json::Value obj_annotation_list = Json::Value(Json::arrayValue);
+                uint32_t bbox_count = 0;
+                /** retrieve annotations from sample_annotation.json */
+                for(uint32_t i=0; i<sampleAnnotation.size(); i++)
+                {
+                    const Json::Value& annotation_i = sampleAnnotation[i];
+                    Json::Value annotation_i_copy;
+                    if(ls["sample_token"].asString() == annotation_i["sample_token"].asString())
+                    {
+                        annotation_i_copy["annotation_token"] = annotation_i["token"];
+                        annotation_i_copy["translation"] = annotation_i["translation"];
+                        annotation_i_copy["size"] = annotation_i["size"];
+                        annotation_i_copy["rotation"] = annotation_i["rotation"];
+
+                        for(uint32_t j=0; j<instance.size(); j++)
+                        {
+                            Json::Value& instance_j = instance[j];
+                            // RLOGI("instance token: %s, token: %s", annotation_i["instance_token"].asString().c_str(), instance_j["token"].asString().c_str());
+                            if(annotation_i["instance_token"].asString() == instance_j["token"].asString())
+                            {
+                                // RLOGI("lidar sweeep (%d) annotation (%d), match instance_token (%s)", ls_count, bbox_count, instance_j["token"].asString().c_str());
+                                for(uint32_t k=0; k<category.size(); k++)
+                                {
+                                    Json::Value& category_k = category[k];
+                                    if(instance_j["category_token"].asString() == category_k["token"].asString())
+                                    {
+                                        annotation_i_copy["category_name"] = category_k["name"];
+                                        // RLOGI("annotation [%d] name: %s", i, category_k["name"].asString().c_str());
+                                        break;
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                        // RLOGI("lidar sweeep (%d) append annotation (%d)",  ls_count, bbox_count);
+                        obj_annotation_list[bbox_count++] = annotation_i_copy;
+                    }
+                }
+                // RLOGI("lidarsweep [%d] bbox_count: %d", ls_count, obj_annotation_list.size());
+
                 sweeps.push_back(LidarSweep{
                     ls["timestamp"].asUInt64(),
                     dir + "/" + ls["filename"].asString(),
                     ls["token"].asString(),
                     ls["sample_token"].asString(),
                     obj_quat,
-                    obj_trans
+                    obj_trans,
+                    obj_annotation_list
                 });
             }
             if (sample["token"].asString() == last_sample_token) 
@@ -193,6 +238,33 @@ struct NuScenesConfig
         }
         RLOGI("loaded (%s)", sample_data_json_file.c_str());
 
+        std::string sample_annotation_json_file = nuScenesConfig.DataPath() + "/sample_annotation.json";
+        std::ifstream configSampleAnnotation(sample_annotation_json_file);
+        if (!configSampleAnnotation.good()) 
+        {
+            RLOGE("Can't open file: %s", sample_annotation_json_file.c_str());
+            return false;
+        }
+        RLOGI("loaded (%s)", sample_annotation_json_file.c_str());
+
+        std::string instance_json_file = nuScenesConfig.DataPath() + "/instance.json";
+        std::ifstream configInstance(instance_json_file);
+        if (!configInstance.good()) 
+        {
+            RLOGE("Can't open file: %s", instance_json_file.c_str());
+            return false;
+        }
+        RLOGI("loaded (%s)", instance_json_file.c_str());
+
+        std::string category_json_file = nuScenesConfig.DataPath() + "/category.json";
+        std::ifstream configCategory(category_json_file);
+        if (!configCategory.good()) 
+        {
+            RLOGE("Can't open file: %s", category_json_file.c_str());
+            return false;
+        }
+        RLOGI("loaded (%s)", category_json_file.c_str());
+
         std::string ego_pose_json_file = nuScenesConfig.DataPath() + "/ego_pose.json";
         std::ifstream configEgoPose(ego_pose_json_file);
         if (!configEgoPose.good()) 
@@ -207,6 +279,9 @@ struct NuScenesConfig
         reader.parse(configSample,     nuScenesConfig.sample);
         reader.parse(configSampleData, nuScenesConfig.sampleData);
         reader.parse(configEgoPose, nuScenesConfig.egoPose);
+        reader.parse(configSampleAnnotation, nuScenesConfig.sampleAnnotation);
+        reader.parse(configInstance, nuScenesConfig.instance);
+        reader.parse(configCategory, nuScenesConfig.category);
 
         RLOGI("LoadNuscenesJson success.");
         return true;
@@ -226,7 +301,7 @@ public:
     {
     }
 
-    bool LoadConfig(const char* yaml_config_file)
+    bool LoadConfig(const char* yaml_config_file, int set_scene_idx=-1)
     {
         RLOGI("load yaml config %s", yaml_config_file);
         if(!NuScenesConfig::LoadNuscenesJson(yaml_config_file, ns_config_))
@@ -238,10 +313,14 @@ public:
         ns_config_.PrintNuscenesInfo();
         for(uint32_t i=0; i<ns_config_.scene.size(); i++)
         {
+            if(set_scene_idx>=0 && set_scene_idx!=i)
+            {
+                continue;
+            }
             Json::Value scene_i = ns_config_.scene[i];
-            std::vector<NuScenesConfig::LidarSweep> pcds = ns_config_.GetSceneSweeps(scene_i);
-            allscene_pcd_files_.push_back(pcds);
-            RLOGI("scene[%d] name: %s, pcds.size: %d.", i, scene_i["name"].asString().c_str(), pcds.size());
+            std::vector<NuScenesConfig::LidarSweep> LidarSweeps = ns_config_.GetSceneSweeps(scene_i);
+            allscene_pcd_files_.push_back(LidarSweeps);
+            RLOGI("scene[%d] name: %s, LidarSweeps.size: %d.", i, scene_i["name"].asString().c_str(), LidarSweeps.size());
         }
         return true;
     }
@@ -254,16 +333,16 @@ public:
             return false;
         }
 
-        std::vector<NuScenesConfig::LidarSweep>& pcds = allscene_pcd_files_[scene_idx];
-        for(uint32_t i=0; i<pcds.size(); i++)
+        std::vector<NuScenesConfig::LidarSweep>& LidarSweeps = allscene_pcd_files_[scene_idx];
+        for(uint32_t i=0; i<LidarSweeps.size(); i++)
         {
-            NuScenesConfig::LidarSweep& pcd = pcds[i];
+            NuScenesConfig::LidarSweep& ls_i = LidarSweeps[i];
             pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_ptr(new pcl::PointCloud<pcl::PointXYZI>());
-            ReadPCDFile(pcd.filename, cloud_ptr);
+            ReadPCDFile(ls_i.filename, cloud_ptr);
             pcs.push_back(cloud_ptr);
-            LOGPF("load file (%s), point size: %ld", pcd.filename.c_str(), cloud_ptr->size());
+            LOGPF("load file (%s), point size: %ld", ls_i.filename.c_str(), cloud_ptr->size());
         }
-        RLOGI("read (%d) pcds from scene (%d).", pcs.size(), scene_idx);
+        RLOGI("read (%d) LidarSweeps from scene (%d).", pcs.size(), scene_idx);
         return true;
     }
 
@@ -286,7 +365,7 @@ public:
         Json::Value& data_list_obj = root_obj["data"];
         RLOGI("camera json obj size: %d", data_list_obj.size());
 
-        std::vector<NuScenesConfig::LidarSweep>& pcds = allscene_pcd_files_[scene_idx];
+        std::vector<NuScenesConfig::LidarSweep>& LidarSweeps = allscene_pcd_files_[scene_idx];
         std::vector<uint64_t> camera_avgts_us;
 
         for(uint32_t i=0; i<data_list_obj.size(); i++)
@@ -315,10 +394,10 @@ public:
 
             uint64_t mints_diff = std::numeric_limits<uint64_t>::max();
             int32_t mints_idx = -1;
-            for(uint32_t i=0; i<pcds.size(); i++)
+            for(uint32_t i=0; i<LidarSweeps.size(); i++)
             {
-                NuScenesConfig::LidarSweep& pcd = pcds[i];
-                int64_t ts_diff = pcd.timestamp_us - avgts;
+                NuScenesConfig::LidarSweep& ls_i = LidarSweeps[i];
+                int64_t ts_diff = ls_i.timestamp_us - avgts;
                 uint64_t uts_diff = std::abs(ts_diff);
                 if(uts_diff < mints_diff)
                 {
@@ -328,15 +407,15 @@ public:
             }
             if(mints_idx >= 0)
             {
-                NuScenesConfig::LidarSweep& pcd = pcds[mints_idx];
+                NuScenesConfig::LidarSweep& ls_i = LidarSweeps[mints_idx];
                 /** encode with LSCH128X1 protocol */
                 pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_ptr(new pcl::PointCloud<pcl::PointXYZI>());
-                ReadPCDFile(pcd.filename, cloud_ptr);
-                DIFOP_Frame_t difop_frame = LSCH128X1Encoder::MakeDifopFrame(pcd.timestamp_us);
-                MSOP_Frames_t msop_frames = LSCH128X1Encoder::MakeMsopFrames(cloud_ptr, pcd.timestamp_us);
+                ReadPCDFile(ls_i.filename, cloud_ptr);
+                DIFOP_Frame_t difop_frame = LSCH128X1Encoder::MakeDifopFrame(ls_i.timestamp_us);
+                MSOP_Frames_t msop_frames = LSCH128X1Encoder::MakeMsopFrames(cloud_ptr, ls_i.timestamp_us);
 
                 /** save msop and difop frame to file */
-                std::string pcd_base_filename = pcd.filename.substr(pcd.filename.find_last_of("//") + 1);
+                std::string pcd_base_filename = ls_i.filename.substr(ls_i.filename.find_last_of("//") + 1);
                 std::string pcd_ch128x1_path = output_dir + pcd_base_filename + ".ch128x1";
 
                 FILE * pFile;
@@ -353,15 +432,16 @@ public:
                 RLOGI("pcd_ch128x1_path: %s bytes written: %ld, raw bytes: %ld", \
                     pcd_ch128x1_path.c_str(), total_bytes, LSCH128X1Encoder::CH128X1_FRAME_SIZE_*(msop_frames.size() + 1));
 
-                data_i["LIDAR_TOP"]["timestamp_us"] = (Json::UInt64)(pcd.timestamp_us);
-                data_i["LIDAR_TOP"]["pcd_file"] = pcd.filename;
+                data_i["LIDAR_TOP"]["timestamp_us"] = (Json::UInt64)(ls_i.timestamp_us);
+                data_i["LIDAR_TOP"]["pcd_file"] = ls_i.filename;
                 data_i["LIDAR_TOP"]["ch128x1_file"] = pcd_ch128x1_path.c_str();
-                data_i["LIDAR_TOP"]["token"] = pcd.token;
-                data_i["LIDAR_TOP"]["sample_token"] = pcd.sample_token;
+                data_i["LIDAR_TOP"]["token"] = ls_i.token;
+                data_i["LIDAR_TOP"]["sample_token"] = ls_i.sample_token;
                 // float quat_wxyz_ego2world[4] = {0.0f};
                 // float trans_xyz_ego2world[3] = {0.0f};
-                data_i["LIDAR_TOP"]["quat_wxyz_ego2world"] = pcd.obj_quat;
-                data_i["LIDAR_TOP"]["trans_xyz_ego2world"] = pcd.obj_trans;
+                data_i["LIDAR_TOP"]["quat_wxyz_ego2world"] = ls_i.obj_quat;
+                data_i["LIDAR_TOP"]["trans_xyz_ego2world"] = ls_i.obj_trans;
+                data_i["LIDAR_TOP"]["annotation_list"] = ls_i.obj_annotation_list;
                 RLOGI("camera block[%d] match lidar data (diff=%ldus):\n%s\n", i, mints_diff, data_i["LIDAR_TOP"].toStyledString().c_str());
             }
             else
@@ -501,9 +581,9 @@ public:
     {
         // LSCH128X1Encoder::test();
         std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> pcs;
-        // LoadPCDByScene(1, pcs);
-        // LoadCameraJsonThenAddLidar(1, "/home/hugoliu/alaska/dataset/nuscenes/data_set_noa_sgrbg12/nusc_dataset_noa_sgrbg12.json");
-        LoadLidarJsonThenViz("/dev/shm/nuscenes/mini/nusc_dataset_noa_sgrbg12.json");
+        LoadPCDByScene(1, pcs);
+        LoadCameraJsonThenAddLidar(1, "/home/hugoliu/alaska/dataset/nuscenes/data_set_noa_sgrbg12/nusc_dataset_noa_sgrbg12.json");
+        // LoadLidarJsonThenViz("/dev/shm/nuscenes/mini/nusc_dataset_noa_sgrbg12.json");
     }
 
 private:
