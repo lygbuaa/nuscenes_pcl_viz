@@ -29,7 +29,7 @@ int main(int argc, char **argv)
     SignalHandlers::RegisterBreakSignals(SIGINT);
 
     auto ns_adapter = std::make_shared<NuscenesAdapter>();
-    ns_adapter -> LoadConfig(argv[1], -1);
+    // ns_adapter -> LoadConfig(argv[1], -1);
     ns_adapter -> test();
 
     // uint32_t heartbeat = 0;

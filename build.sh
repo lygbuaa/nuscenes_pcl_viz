@@ -18,6 +18,7 @@ function find_project_root_path() {
 PRJ_ROOT_PATH=$( find_project_root_path )
 echo "project_root_path: ${PRJ_ROOT_PATH}" 
 cd ${PRJ_ROOT_PATH}
+source set_env.sh
 
 BUILD_TYPE=Debug  #Debug or Release
 ARCH_TYPE=x86-64

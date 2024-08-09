@@ -11,9 +11,18 @@
 #include "pcl/point_types.h"
 #include "pcl/point_cloud.h"
 #include "pcl/visualization/pcl_visualizer.h"
+#include <pcl/point_representation.h>
 #include "logging_utils.h"
 #include "lsch128x1_encoder.h"
 #include "pcl_preprocess.h"
+
+#define RUN_TRT_MODEL true
+#if RUN_TRT_MODEL
+#include "centerpoint_wrapper.h"
+#endif
+
+#define RETRIEVE_ANNOTATION_BBOXES true
+
 
 struct NuScenesConfig
 {
@@ -130,6 +139,7 @@ struct NuScenesConfig
                 }
 
                 Json::Value obj_annotation_list = Json::Value(Json::arrayValue);
+#if RETRIEVE_ANNOTATION_BBOXES
                 uint32_t bbox_count = 0;
                 /** retrieve annotations from sample_annotation.json */
                 for(uint32_t i=0; i<sampleAnnotation.size(); i++)
@@ -168,7 +178,7 @@ struct NuScenesConfig
                     }
                 }
                 // RLOGI("lidarsweep [%d] bbox_count: %d", ls_count, obj_annotation_list.size());
-
+#endif
                 sweeps.push_back(LidarSweep{
                     ls["timestamp"].asUInt64(),
                     dir + "/" + ls["filename"].asString(),
@@ -463,7 +473,7 @@ public:
         return true;
     }
 
-    bool LoadLidarJsonThenViz(const char* lidar_json_file)
+    bool LoadLidarJsonThenViz(const char* lidar_json_file, const char* trt_model_path)
     {
         std::ifstream lidarJson(lidar_json_file);
         if (!lidarJson.good())
@@ -472,8 +482,16 @@ public:
             return false;
         }
         RLOGI("loaded (%s)", lidar_json_file);
-        uint8_t* tmpbuf = new uint8_t[LSCH128X1Encoder::CH128X1_FRAME_SIZE_];
+#if RUN_TRT_MODEL
+        if(!load_centerpoint_model(trt_model_path))
+        {
+            RLOGE("Can't load model: %s", trt_model_path);
+            return false;
+        }
+#endif
+        float* points_xyzi_array = new float[4 * PCD_POINTS_NUM_MAX_];
 
+        uint8_t* tmpbuf = new uint8_t[LSCH128X1Encoder::CH128X1_FRAME_SIZE_];
         std::shared_ptr<PclPreprocess> pps = std::make_shared<PclPreprocess>();
         pps->init_filter();
 
@@ -566,13 +584,27 @@ public:
             // pps -> TransformLidar2Ego(cloud_sensor, cloud_ego);
             pps -> GetTfLidar2World(quat_wxyz_ego2world, trans_xyz_ego2world);
             pps -> TransformLidar2World(cloud_filter, cloud_world);
-            
+
+            /** copy points into array, check if pointcloud data interleaved ? */
+            memset(points_xyzi_array, 0, 4*PCD_POINTS_NUM_MAX_*sizeof(float));
+            // cloud_filter->copyToFloatArray(points_xyzi_array);
+            for(uint32_t i=0; i<cloud_filter->size(); i++)
+            {
+                pcl::PointXYZI& p = cloud_filter->at(i);
+                points_xyzi_array[4*i] = p.x;
+                points_xyzi_array[4*i+1] = p.y;
+                points_xyzi_array[4*i+2] = p.z;
+                points_xyzi_array[4*i+3] = p.intensity;
+            }
+            /** model infer */
+
             /** pcl visualize */
             viewer->updatePointCloud<pcl::PointXYZI>(cloud_world, *color_handler, "CH128X1_VIZ");
             // usleep(100*1000);
             viewer->spinOnce(100);
         }
 
+        delete points_xyzi_array;
         delete tmpbuf;
         return true;
     }
@@ -580,10 +612,10 @@ public:
     void test()
     {
         // LSCH128X1Encoder::test();
-        std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> pcs;
-        LoadPCDByScene(1, pcs);
-        LoadCameraJsonThenAddLidar(1, "/home/hugoliu/alaska/dataset/nuscenes/data_set_noa_sgrbg12/nusc_dataset_noa_sgrbg12.json");
-        // LoadLidarJsonThenViz("/dev/shm/nuscenes/mini/nusc_dataset_noa_sgrbg12.json");
+        // std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> pcs;
+        // LoadPCDByScene(1, pcs);
+        // LoadCameraJsonThenAddLidar(1, "/home/hugoliu/alaska/dataset/nuscenes/data_set_noa_sgrbg12/nusc_dataset_noa_sgrbg12.json");
+        LoadLidarJsonThenViz("/dev/shm/nuscenes/mini/nusc_dataset_noa_sgrbg12.json", "/home/hugoliu/github/nuscenes/nuscenes_pcl_viz/centerpoint/model/centerpoint_fp16.trt");
     }
 
 private:
@@ -642,6 +674,7 @@ private:
     NuScenesConfig ns_config_;
     std::vector<std::vector<NuScenesConfig::LidarSweep>> allscene_pcd_files_;
     const std::string PCD_CH128X1_DIR_ = "/dev/shm/nuscenes/mini/";
+    constexpr static uint32_t PCD_POINTS_NUM_MAX_ = 153600;
     
 };
 

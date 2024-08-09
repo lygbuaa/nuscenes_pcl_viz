@@ -20,4 +20,6 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
 CONF_FILE_PATH=${PRJ_PATH}/config.yaml
 
 cd ${PRJ_PATH}
+source set_env.sh
+
 build/lidar_encoder_bin ${CONF_FILE_PATH}
