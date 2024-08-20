@@ -23,7 +23,6 @@
 
 #define RETRIEVE_ANNOTATION_BBOXES true
 
-
 struct NuScenesConfig
 {
     std::string name;
