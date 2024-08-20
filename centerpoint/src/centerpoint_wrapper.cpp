@@ -71,7 +71,7 @@ public:
     //!
     //! \brief Runs the TensorRT inference engine for this sample
     //!
-    bool infer(float* points, const int pointNum, std::vector<Box>& predResult);
+    bool infer(float* points, const int pointNum, std::vector<DetBox3d_t>& predResult);
 
     bool SaveTrtEngine(const std::string& file_path);
     bool LoadTrtEngine(const std::string& file_path);
@@ -100,7 +100,7 @@ private:
     //!
     //! \brief Classifies digits and verify result
     //!
-    void saveOutput(std::vector<Box>& predResult, std::string& inputFileName);
+    void saveOutput(std::vector<DetBox3d_t>& predResult, std::string& inputFileName);
     bool testFun(const samplesCommon::BufferManager& buffers);
 };
 
@@ -238,7 +238,7 @@ bool SampleCenterPoint::testFun(const samplesCommon::BufferManager& buffers){
 //! \details This function is the main execution function of the sample. It allocates the buffer,
 //!          sets inputs and executes the engine.
 //!
-bool SampleCenterPoint::infer(float* points, const int pointNum, std::vector<Box>& predResult)
+bool SampleCenterPoint::infer(float* points, const int pointNum, std::vector<DetBox3d_t>& predResult)
 {
     // Create RAII buffer manager object
     samplesCommon::BufferManager buffers(mEngine);
@@ -290,7 +290,7 @@ bool SampleCenterPoint::infer(float* points, const int pointNum, std::vector<Box
 /* There is a bug. 
  * If I change void to bool, the "for (size_t idx = 0; idx < mEngine->getNbBindings(); idx++)" loop will not stop.
  */
-void SampleCenterPoint::saveOutput(std::vector<Box>& predResult, std::string& inputFileName)
+void SampleCenterPoint::saveOutput(std::vector<DetBox3d_t>& predResult, std::string& inputFileName)
 {
     
     std::string::size_type pos = inputFileName.find_last_of("/");
@@ -401,7 +401,7 @@ bool load_centerpoint_model(const std::string& trt_model_path)
     return true;
 }
 
-bool infer_centerpoint_model(float* points, const int pointNum, std::vector<Box>& predResult)
+bool infer_centerpoint_model(float* points, const int pointNum, std::vector<DetBox3d_t>& predResult)
 {
     if(g_sample_ptr_ == nullptr)
     {

@@ -5,7 +5,7 @@
 #include "common.h"
 #include "config.h"
 
-struct Box{
+struct DetBox3d_t{
     float x;
     float y;
     float z;
@@ -21,5 +21,5 @@ struct Box{
     bool isDrop; // for nms
 };
 
-void postprocess(const samplesCommon::BufferManager& buffers, std::vector<Box>& predResult);
+void postprocess(const samplesCommon::BufferManager& buffers, std::vector<DetBox3d_t>& predResult);
 #endif

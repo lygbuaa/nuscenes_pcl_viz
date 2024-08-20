@@ -10,7 +10,7 @@
 #include "common.h"
 
 
-inline void RotateAroundCenter(Box& box, float (&corner)[4][2], float& cosVal, float& sinVal, float (&cornerANew)[4][2]){
+inline void RotateAroundCenter(DetBox3d_t& box, float (&corner)[4][2], float& cosVal, float& sinVal, float (&cornerANew)[4][2]){
     
     for(auto idx = 0; idx < 4; idx++){
         auto x = corner[idx][0];
@@ -52,7 +52,7 @@ inline void AlignBox(float (&cornerRot)[4][2], float (&cornerAlign)[2][2]){
 
 }
 
-inline float IoUBev(Box& boxA, Box& boxB){
+inline float IoUBev(DetBox3d_t& boxA, DetBox3d_t& boxB){
    
     float ax1 = boxA.x - boxA.l/2;
     float ax2 = boxA.x + boxA.l/2;
@@ -96,12 +96,12 @@ inline float IoUBev(Box& boxA, Box& boxB){
     return sInter/sUnion;
 }
 
-void AlignedNMSBev(std::vector<Box>& predBoxs){
+void AlignedNMSBev(std::vector<DetBox3d_t>& predBoxs){
     
     if(predBoxs.size() == 0)
         return;
 
-    std::sort(predBoxs.begin(),predBoxs.end(),[ ](Box& box1, Box& box2){return box1.score > box2.score;});
+    std::sort(predBoxs.begin(),predBoxs.end(),[ ](DetBox3d_t& box1, DetBox3d_t& box2){return box1.score > box2.score;});
 
     auto boxSize = predBoxs.size() > INPUT_NMS_MAX_SIZE? INPUT_NMS_MAX_SIZE : predBoxs.size();
     
@@ -114,7 +114,7 @@ void AlignedNMSBev(std::vector<Box>& predBoxs){
         }
     }
 }
-void postprocess(const samplesCommon::BufferManager& buffers, std::vector<Box>& predResult){
+void postprocess(const samplesCommon::BufferManager& buffers, std::vector<DetBox3d_t>& predResult){
 
     std::vector<std::string> regName{   "594", "618", "642", "666", "690", "714"};
     std::vector<std::string> heightName{"598", "622", "646", "670", "694", "718"};
@@ -126,7 +126,7 @@ void postprocess(const samplesCommon::BufferManager& buffers, std::vector<Box>& 
     int clsOffsetPerTask[] = {0, 1, 3, 5, 6, 8};
     
     for (size_t taskIdx = 0; taskIdx < TASK_NUM; taskIdx++){
-        std::vector<Box> predBoxs;
+        std::vector<DetBox3d_t> predBoxs;
         
         float* reg = static_cast<float*>(buffers.getHostBuffer(regName[taskIdx]));
         float* height = static_cast<float*>(buffers.getHostBuffer(heightName[taskIdx]));
@@ -149,7 +149,7 @@ void postprocess(const samplesCommon::BufferManager& buffers, std::vector<Box>& 
                 if(x < X_MIN || x > X_MAX || y < Y_MIN || y > Y_MAX || z < Z_MIN || z > Z_MAX)
                     continue;
                 
-                Box box;
+                DetBox3d_t box;
                 box.x = x;
                 box.y = y;
                 box.z = z;

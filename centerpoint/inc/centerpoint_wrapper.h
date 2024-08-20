@@ -6,6 +6,6 @@
 
 bool load_centerpoint_model(const std::string& trt_model_path);
 
-bool infer_centerpoint_model(float* points, const int pointNum, std::vector<Box>& predResult);
+bool infer_centerpoint_model(float* points, const int pointNum, std::vector<DetBox3d_t>& predResult);
 
 #endif

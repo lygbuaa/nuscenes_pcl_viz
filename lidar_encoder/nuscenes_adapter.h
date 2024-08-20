@@ -473,7 +473,7 @@ public:
         return true;
     }
 
-    bool LoadLidarJsonThenViz(const char* lidar_json_file, const char* trt_model_path)
+    bool LoadLidarJsonThenRunModel(const char* lidar_json_file, const char* trt_model_path)
     {
         std::ifstream lidarJson(lidar_json_file);
         if (!lidarJson.good())
@@ -488,6 +488,7 @@ public:
             RLOGE("Can't load model: %s", trt_model_path);
             return false;
         }
+        RLOGI("loaded model: %s", trt_model_path);
 #endif
         float* points_xyzi_array = new float[4 * PCD_POINTS_NUM_MAX_];
 
@@ -588,15 +589,44 @@ public:
             /** copy points into array, check if pointcloud data interleaved ? */
             memset(points_xyzi_array, 0, 4*PCD_POINTS_NUM_MAX_*sizeof(float));
             // cloud_filter->copyToFloatArray(points_xyzi_array);
-            for(uint32_t i=0; i<cloud_filter->size(); i++)
+            for(uint32_t j=0; j<cloud_filter->size(); j++)
             {
-                pcl::PointXYZI& p = cloud_filter->at(i);
-                points_xyzi_array[4*i] = p.x;
-                points_xyzi_array[4*i+1] = p.y;
-                points_xyzi_array[4*i+2] = p.z;
-                points_xyzi_array[4*i+3] = p.intensity;
+                pcl::PointXYZI& p = cloud_filter->at(j);
+                points_xyzi_array[4*j] = p.x;
+                points_xyzi_array[4*j+1] = p.y;
+                points_xyzi_array[4*j+2] = p.z;
+                points_xyzi_array[4*j+3] = p.intensity;
             }
             /** model infer */
+            std::vector<DetBox3d_t> predResult;
+            Json::Value obj_box3d_list = Json::Value(Json::arrayValue);
+            if(infer_centerpoint_model(points_xyzi_array, cloud_filter->size(), predResult))
+            {
+                RLOGI("predResult boxes: %d", predResult.size());
+                /** append pred results */
+                for(uint32_t j=0; j<predResult.size(); j++)
+                {
+                    DetBox3d_t& box = predResult[j];
+                    Json::Value obj_box3d;
+                    obj_box3d["x"] = box.x;
+                    obj_box3d["y"] = box.y;
+                    obj_box3d["z"] = box.z;
+                    obj_box3d["l"] = box.l;
+                    obj_box3d["h"] = box.h;
+                    obj_box3d["w"] = box.w;
+                    obj_box3d["velX"] = box.velX;
+                    obj_box3d["velY"] = box.velY;
+                    obj_box3d["theta"] = box.theta;
+                    obj_box3d["score"] = box.score;
+                    obj_box3d["cls"] = box.cls;
+                    obj_box3d_list[j] = obj_box3d;
+                }
+            }
+            else
+            {
+                RLOGE("infer_centerpoint_model failed.");
+            }
+            data_i["LIDAR_TOP"]["obj_box3d_list"] = obj_box3d_list;
 
             /** pcl visualize */
             viewer->updatePointCloud<pcl::PointXYZI>(cloud_world, *color_handler, "CH128X1_VIZ");
@@ -604,8 +634,16 @@ public:
             viewer->spinOnce(100);
         }
 
+        lidarJson.close();
         delete points_xyzi_array;
         delete tmpbuf;
+
+        /** update lidar json file */
+        std::string strJson = root_obj.toStyledString();
+        std::ofstream json_ofs;
+        json_ofs.open(lidar_json_file, std::ofstream::out);
+        json_ofs << strJson << std::endl;
+        json_ofs.close();
         return true;
     }
 
@@ -615,7 +653,7 @@ public:
         // std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> pcs;
         // LoadPCDByScene(1, pcs);
         // LoadCameraJsonThenAddLidar(1, "/home/hugoliu/alaska/dataset/nuscenes/data_set_noa_sgrbg12/nusc_dataset_noa_sgrbg12.json");
-        LoadLidarJsonThenViz("/dev/shm/nuscenes/mini/nusc_dataset_noa_sgrbg12.json", "/home/hugoliu/github/nuscenes/nuscenes_pcl_viz/centerpoint/model/centerpoint_fp16.trt");
+        LoadLidarJsonThenRunModel("/dev/shm/nuscenes/mini/nusc_dataset_noa_sgrbg12.json", "/home/hugoliu/github/nuscenes/nuscenes_pcl_viz/centerpoint/model/centerpoint_fp16.trt");
     }
 
 private:
