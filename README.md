@@ -52,3 +52,19 @@ nuscenes lidar-coord: X-right, Y-forward, Z-up
 ],
 "camera_intrinsic": []
 },
+
+## centerpoint class type
+<!-- tasks = [
+    dict(num_class=1, class_names=["car"]),
+    dict(num_class=2, class_names=["truck", "construction_vehicle"]),
+    dict(num_class=2, class_names=["bus", "trailer"]),
+    dict(num_class=1, class_names=["barrier"]),
+    dict(num_class=2, class_names=["motorcycle", "bicycle"]),
+    dict(num_class=2, class_names=["pedestrian", "traffic_cone"]),
+] -->
+0: car,         
+1: truck,       2: construction_vehicle
+3: bus,         4: trailer,     
+5: barrier
+6: motorcycle   7: bicycle      
+8: pedestrian   9: traffic_cone

@@ -4,6 +4,7 @@
 #include "buffers.h"
 #include "common.h"
 #include "config.h"
+#include "preprocess.h"
 
 struct DetBox3d_t{
     float x;

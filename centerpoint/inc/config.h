@@ -20,7 +20,7 @@
 #define THREAD_NUM 2
 
 // paramerters for postprocess
-#define SCORE_THREAHOLD 0.1f
+#define SCORE_THREAHOLD 0.2f
 #define NMS_THREAHOLD 0.2f
 #define INPUT_NMS_MAX_SIZE 1000
 #define OUT_SIZE_FACTOR 4.0f

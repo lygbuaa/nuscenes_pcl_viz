@@ -157,6 +157,9 @@ void postprocess(const samplesCommon::BufferManager& buffers, std::vector<DetBox
                 box.h = dim[1*OUTPUT_H*OUTPUT_W + idx];
                 box.w = dim[2*OUTPUT_H*OUTPUT_W + idx];
                 box.theta = atan2(rot[0*OUTPUT_H*OUTPUT_W + idx], rot[1*OUTPUT_H*OUTPUT_W + idx]);
+                float rot0 = rot[0*OUTPUT_H*OUTPUT_W + idx];
+                float rot1 = rot[1*OUTPUT_H*OUTPUT_W + idx];
+                // LOGPF("theta: %.2f, lhw: (%.2f, %.2f, %.2f), rot: (%.2f, %.2f)", box.theta, box.l, box.h, box.w, rot0, rot1);
                 box.velX = vel[0*OUTPUT_H*OUTPUT_W+idx];
                 box.velY = vel[1*OUTPUT_H*OUTPUT_W+idx];
                 // box.theta = box.theta - PI /2;
@@ -164,6 +167,11 @@ void postprocess(const samplesCommon::BufferManager& buffers, std::vector<DetBox
                 box.score = score[idx];
                 box.cls = cls[idx] + clsOffsetPerTask[taskIdx];
                 box.isDrop = false;
+
+                // if(fabs(rot0) < 0.1f || fabs(rot1) < 0.1f)
+                // {
+                //     box.isDrop = true;
+                // }
 
                 predBoxs.push_back(box);
 

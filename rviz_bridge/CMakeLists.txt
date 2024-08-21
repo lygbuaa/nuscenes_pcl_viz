@@ -22,6 +22,7 @@ find_package(std_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(image_transport REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common filters visualization)
@@ -53,6 +54,7 @@ ament_target_dependencies(pcl_rviz_bridge_bin
   cv_bridge
   image_transport
   geometry_msgs
+  nav_msgs
   visualization_msgs
 )
 

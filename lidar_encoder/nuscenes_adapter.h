@@ -581,16 +581,16 @@ public:
             pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_filter(new pcl::PointCloud<pcl::PointXYZI>());
 
             pps -> Filter(cloud_sensor, cloud_filter);
-            // pps -> TransformLidar2Ego(cloud_sensor, cloud_ego);
-            pps -> GetTfLidar2World(quat_wxyz_ego2world, trans_xyz_ego2world);
-            pps -> TransformLidar2World(cloud_filter, cloud_world);
+            pps -> TransformLidar2Ego(cloud_filter, cloud_ego);
+            // pps -> GetTfLidar2World(quat_wxyz_ego2world, trans_xyz_ego2world);
+            // pps -> TransformLidar2World(cloud_filter, cloud_world);
 
             /** copy points into array, check if pointcloud data interleaved ? */
             memset(points_xyzi_array, 0, 4*PCD_POINTS_NUM_MAX_*sizeof(float));
             // cloud_filter->copyToFloatArray(points_xyzi_array);
-            for(uint32_t j=0; j<cloud_filter->size(); j++)
+            for(uint32_t j=0; j<cloud_ego->size(); j++)
             {
-                pcl::PointXYZI& p = cloud_filter->at(j);
+                pcl::PointXYZI& p = cloud_ego->at(j);
                 points_xyzi_array[4*j] = p.x;
                 points_xyzi_array[4*j+1] = p.y;
                 points_xyzi_array[4*j+2] = p.z;
@@ -599,7 +599,7 @@ public:
             /** model infer */
             std::vector<DetBox3d_t> predResult;
             Json::Value obj_box3d_list = Json::Value(Json::arrayValue);
-            if(infer_centerpoint_model(points_xyzi_array, cloud_filter->size(), predResult))
+            if(infer_centerpoint_model(points_xyzi_array, cloud_ego->size(), predResult))
             {
                 RLOGI("predResult boxes: %d", predResult.size());
                 /** append pred results */
@@ -628,7 +628,7 @@ public:
             data_i["LIDAR_TOP"]["obj_box3d_list"] = obj_box3d_list;
 
             /** pcl visualize */
-            viewer->updatePointCloud<pcl::PointXYZI>(cloud_world, *color_handler, "CH128X1_VIZ");
+            viewer->updatePointCloud<pcl::PointXYZI>(cloud_ego, *color_handler, "CH128X1_VIZ");
             // usleep(100*1000);
             viewer->spinOnce(100);
         }

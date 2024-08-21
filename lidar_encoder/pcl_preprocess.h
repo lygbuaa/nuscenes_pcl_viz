@@ -48,6 +48,61 @@ public:
         return ss.str();
     }
 
+    bool OrientationEgo2World(const float* ori_wxyz_ego, const float* quat_wxyz_e2w, float* const ori_wxyz_world)
+    {
+        Eigen::Quaternionf q_ego(ori_wxyz_ego[0], ori_wxyz_ego[1], ori_wxyz_ego[2], ori_wxyz_ego[3]);
+        Eigen::Quaternionf q_e2w(quat_wxyz_e2w[0], quat_wxyz_e2w[1], quat_wxyz_e2w[2], quat_wxyz_e2w[3]);
+        Eigen::Quaternionf q_world = q_e2w * q_ego;
+        q_world.normalize();
+        ori_wxyz_world[0] = q_world.w();
+        ori_wxyz_world[1] = q_world.x();
+        ori_wxyz_world[2] = q_world.y();
+        ori_wxyz_world[3] = q_world.z();
+        return true;
+    }
+
+    bool OrientationLidar2World(const float* ori_wxyz_lidar, const float* quat_wxyz_e2w, float* const ori_wxyz_world)
+    {
+        Eigen::Quaternionf q_lidar(ori_wxyz_lidar[0], ori_wxyz_lidar[1], ori_wxyz_lidar[2], ori_wxyz_lidar[3]);
+        Eigen::Quaternionf q_l2e(QUAT_WXYZ_LIDAR2EGO_[0], QUAT_WXYZ_LIDAR2EGO_[1], QUAT_WXYZ_LIDAR2EGO_[2], QUAT_WXYZ_LIDAR2EGO_[3]);
+        Eigen::Quaternionf q_e2w(quat_wxyz_e2w[0], quat_wxyz_e2w[1], quat_wxyz_e2w[2], quat_wxyz_e2w[3]);
+        Eigen::Quaternionf q_world = q_e2w * q_l2e * q_lidar;
+        q_world.normalize();
+        ori_wxyz_world[0] = q_world.w();
+        ori_wxyz_world[1] = q_world.x();
+        ori_wxyz_world[2] = q_world.y();
+        ori_wxyz_world[3] = q_world.z();
+        return true;
+    }
+
+    bool PoseEgo2World(const float* trans_xyz_ego, const float* quat_wxyz_e2w, const float* trans_xyz_e2w, float* const trans_xyz_world)
+    {
+        Eigen::Affine3f tf_e2w = GetTfEgo2World(quat_wxyz_e2w, trans_xyz_e2w);
+
+        Eigen::Vector3f pose3d_ego(trans_xyz_ego[0], trans_xyz_ego[1], trans_xyz_ego[2]);
+        Eigen::Vector3f pose3d_world = tf_e2w * pose3d_ego;
+        trans_xyz_world[0] = pose3d_world[0];
+        trans_xyz_world[1] = pose3d_world[1];
+        trans_xyz_world[2] = pose3d_world[2];
+
+        return true;
+    }
+
+    bool PoseLidar2World(const float* trans_xyz_lidar, const float* quat_wxyz_e2w, const float* trans_xyz_e2w, float* const trans_xyz_world)
+    {
+        Eigen::Affine3f tf_l2e = GetTfLidar2Ego();
+        Eigen::Affine3f tf_e2w = GetTfEgo2World(quat_wxyz_e2w, trans_xyz_e2w);
+        Eigen::Affine3f tf_l2w = tf_e2w * tf_l2e;
+
+        Eigen::Vector3f pose3d_lidar(trans_xyz_lidar[0], trans_xyz_lidar[1], trans_xyz_lidar[2]);
+        Eigen::Vector3f pose3d_world = tf_l2w * pose3d_lidar;
+        trans_xyz_world[0] = pose3d_world[0];
+        trans_xyz_world[1] = pose3d_world[1];
+        trans_xyz_world[2] = pose3d_world[2];
+
+        return true;
+    }
+
     static Eigen::Affine3f GetTfLidar2Ego()
     {
         Eigen::Affine3f tf = Eigen::Affine3f::Identity();
@@ -61,7 +116,7 @@ public:
     Eigen::Affine3f GetTfEgo2World(const float* quat_wxyz_e2w, const float* trans_xyz_e2w)
     {
         Eigen::Affine3f tf = Eigen::Affine3f::Identity();
-        // tf.translation() << trans_xyz_e2w[0], trans_xyz_e2w[1], trans_xyz_e2w[2];
+        tf.translation() << trans_xyz_e2w[0], trans_xyz_e2w[1], trans_xyz_e2w[2];
         tf.rotate(Eigen::Quaternionf(quat_wxyz_e2w[0], quat_wxyz_e2w[1], quat_wxyz_e2w[2], quat_wxyz_e2w[3]));
         Eigen::Matrix4f mat = tf.matrix();
         // RLOGI("GetTfEgo2World:\n%s", MatrixtoString(mat).c_str());
@@ -112,7 +167,8 @@ public:
 
 private:
     constexpr static float QUAT_WXYZ_LIDAR2EGO_[4] = {0.706749235646644, -0.015300993788500868, 0.01739745181256607, -0.7070846669051719};
-    constexpr static float TRANS_XYZ_LIDAR2EGO_[3] = {0.985793, 0.0, 1.84019};
+    // constexpr static float TRANS_XYZ_LIDAR2EGO_[3] = {0.985793, 0.0, 1.84019};
+    constexpr static float TRANS_XYZ_LIDAR2EGO_[3] = {0.0, 0.0, 1.84019};
     Eigen::Affine3f tf_l2e_;
     Eigen::Affine3f tf_l2w_;
     std::shared_ptr<pcl::ConditionalRemoval<pcl::PointXYZI>> cr_filter_;
