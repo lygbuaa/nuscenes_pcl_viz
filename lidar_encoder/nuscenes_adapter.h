@@ -646,6 +646,15 @@ public:
         return true;
     }
 
+    void LoadSceneAndEncodeLidar(const char* yaml_config_path, const char* cam_json_config_path, int set_scene_idx=1)
+    {
+        /** load all scenes with -1 */
+        LoadConfig(yaml_config_path, -1);
+        std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> pcs;
+        LoadPCDByScene(set_scene_idx, pcs);
+        LoadCameraJsonThenAddLidar(set_scene_idx, cam_json_config_path);
+    }
+
     void test()
     {
         // LSCH128X1Encoder::test();

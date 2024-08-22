@@ -126,10 +126,11 @@ public:
                 float fz = p.z;
                 float fi = p.intensity / 100.0f;
                 /** nuscenes body-coord: X-right, Y-forward, Z-up */
-                float dist = sqrt(fx*fx + fy*fy);
+                float dist = sqrt(fx*fx + fy*fy + fz*fz);
+                float hori_dist = sqrt(fx*fx + fy*fy);
                 /** acos return [0,pi], with sign of y, extend to [-pi, pi] */
-                float hori_angle = copysign(acos(fx/dist)*57.3f, fy);
-                float vert_angle = atan(fz/dist)*57.3f;
+                float hori_angle = copysign(acos(fx/hori_dist)*57.3f, fy);
+                float vert_angle = asin(fz/dist)*57.3f;
                 int32_t line_num = std::round((vert_angle - LOWER_FOV_) / VERTICAL_RESOLUTION_);
                 assert(line_num >= 0 && line_num < 256);
                 // assert(line_num >= 100);
@@ -233,9 +234,9 @@ public:
 
             /** polar to cartesian, sensor coordinate */
             pcl::PointXYZI point{};
-            point.x = radius * std::cos(theta);
-            point.y = radius * std::sin(theta);
-            point.z = radius * std::tan(phi);
+            point.x = radius * std::cos(phi) * std::cos(theta);
+            point.y = radius * std::cos(phi) * std::sin(theta);
+            point.z = radius * std::sin(phi);
             point.intensity = intensity * 100.0f;
             // point.intensity = 1.0f;
             cloud_ptr->push_back(point);

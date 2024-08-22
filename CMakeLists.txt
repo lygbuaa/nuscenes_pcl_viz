@@ -54,7 +54,7 @@ link_directories(
     $ENV{TensorRT_Lib}
 )
 
-set(CUDA_PLUGIN_PATH ${CMAKE_CURRENT_SOURCE_DIR}/centerpoint/model/libcenterpoint_trt_plugin.so)
+# set(CUDA_PLUGIN_PATH ${CMAKE_CURRENT_SOURCE_DIR}/centerpoint/model/libcenterpoint_trt_plugin.so)
 
 file(GLOB COMMON_SRC_FILES
     centerpoint/common/*.cpp
@@ -75,7 +75,7 @@ target_link_libraries(
     ${PCL_LIBRARIES} 
     ${jsoncpp_LIBRARIES} 
     ${yamlcpp_LIBRARIES}
-    ${CUDA_PLUGIN_PATH}
+    # ${CUDA_PLUGIN_PATH}
     libnvinfer.so
     -lnvonnxparser
     -lnvparsers
