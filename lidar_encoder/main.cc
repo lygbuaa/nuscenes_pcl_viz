@@ -29,7 +29,7 @@ int main(int argc, char **argv)
     SignalHandlers::RegisterBreakSignals(SIGINT);
 
     auto ns_adapter = std::make_shared<NuscenesAdapter>();
-    ns_adapter -> LoadSceneAndEncodeLidar(argv[1], argv[2], 1);
+    // ns_adapter -> LoadSceneAndEncodeLidar(argv[1], argv[2], 1);
     ns_adapter -> LoadLidarJsonThenRunModel(argv[3], argv[4]);
 
     // uint32_t heartbeat = 0;

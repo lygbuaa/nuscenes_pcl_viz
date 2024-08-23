@@ -159,10 +159,10 @@ void postprocess(const samplesCommon::BufferManager& buffers, std::vector<DetBox
                 box.theta = atan2(rot[0*OUTPUT_H*OUTPUT_W + idx], rot[1*OUTPUT_H*OUTPUT_W + idx]);
                 float rot0 = rot[0*OUTPUT_H*OUTPUT_W + idx];
                 float rot1 = rot[1*OUTPUT_H*OUTPUT_W + idx];
-                // LOGPF("theta: %.2f, lhw: (%.2f, %.2f, %.2f), rot: (%.2f, %.2f)", box.theta, box.l, box.h, box.w, rot0, rot1);
                 box.velX = vel[0*OUTPUT_H*OUTPUT_W+idx];
                 box.velY = vel[1*OUTPUT_H*OUTPUT_W+idx];
                 // box.theta = box.theta - PI /2;
+                // LOGPF("theta: %.2f, lhw: (%.2f, %.2f, %.2f), vel: (%.2f, %.2f), yaw: %.2f ", box.theta, box.l, box.h, box.w, box.velX, box.velY, atan2(box.velX, box.velY));
 
                 box.score = score[idx];
                 box.cls = cls[idx] + clsOffsetPerTask[taskIdx];

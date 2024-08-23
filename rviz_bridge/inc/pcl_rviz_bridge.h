@@ -322,7 +322,17 @@ public:
                 const int cls_i = detection_i["cls"].asInt64();
                 const float score_i = detection_i["score"].asFloat();
 
-                const float yaw_rad_i = detection_i["theta"].asFloat();
+                float yaw_rad_i = detection_i["theta"].asFloat();
+                const float velx_i = detection_i["velX"].asFloat();
+                const float vely_i = detection_i["velY"].asFloat();
+                // bool using_track_angle = false;
+                // if(fabs(velx_i)>0.1f || fabs(vely_i)>0.1f)
+                // {
+                //     /** use track angle instead. */
+                //     yaw_rad_i = atan2(velx_i, vely_i);
+                //     using_track_angle = true;
+                // }
+
                 float trans_xyz_lidar[3] = {0.0f};
                 float trans_xyz_world[3] = {0.0f};
                 float size_xyz[3] = {0.0f};
@@ -350,7 +360,7 @@ public:
                 // marker.pose.position.y = trans_xyz_lidar[1];
                 // marker.pose.position.z = trans_xyz_lidar[2];
 
-                const float rpy_i[3] = {0.0f, 0.0f, yaw_rad_i+0.5f*M_PI}; //0.5f*M_PI
+                const float rpy_i[3] = {0.0f, 0.0f, yaw_rad_i-0.5f*M_PI}; //0.5f*M_PI
                 float quat_ego_i[4] = {0};
                 float quat_world_i[4] = {0};
                 BasicUtils::QuatFromEuler(rpy_i, quat_ego_i);
@@ -398,6 +408,11 @@ public:
                     marker.color.r = 0.0;
                     marker.color.g = 0.0;
                     marker.color.b = 1.0;
+
+                    // if(using_track_angle)
+                    // {
+                    //     marker.color.g = 1.0;
+                    // }
                 }
                 else if(cls_i==3 || cls_i==4)
                 {
